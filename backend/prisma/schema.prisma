@@ -1,0 +1,85 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  DOCTOR
+  ENGINEER
+  ADMIN
+}
+
+enum MeetingStatus {
+  PROPOSED
+  NDA_ACCEPTED
+  TIME_CONFIRMED
+  CANCELLED
+}
+
+model User {
+  id             String    @id @default(uuid())
+  supabaseAuthId String    @unique // Links to Supabase Auth table
+  email          String    @unique
+  fullName       String
+  role           Role
+  specialization String    // e.g., "Radiology", "Software Engineering"
+  institution    String    // edu.tr validation info
+  isVerified     Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  
+  posts           Post[]
+  meetingRequests MeetingRequest[] @relation("Requester")
+  meetingReceived MeetingRequest[] @relation("Receiver")
+  ndaLogs         NdaLog[]
+}
+
+model Post {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  tags        String[] // Technical tags
+  domain      String   // e.g., "AI in Imaging"
+  authorId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author      User     @relation(fields: [authorId], references: [id])
+  ndaLogs     NdaLog[]
+  meetings    MeetingRequest[]
+}
+
+model NdaLog {
+  id          String   @id @default(uuid())
+  postId      String
+  userId      String
+  signedAt    DateTime @default(now())
+  ipAddress   String?  // For audit trails
+
+  post        Post     @relation(fields: [postId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId]) // A user can sign an NDA for a post only once
+}
+
+model MeetingRequest {
+  id             String        @id @default(uuid())
+  postId         String
+  requesterId    String
+  receiverId     String
+  proposedSlots  Json          // Array of proposed time slots
+  confirmedSlot  DateTime?
+  status         MeetingStatus @default(PROPOSED)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  post           Post          @relation(fields: [postId], references: [id])
+  requester      User          @relation("Requester", fields: [requesterId], references: [id])
+  receiver       User          @relation("Receiver", fields: [receiverId], references: [id])
+}
